@@ -1,0 +1,60 @@
+active:
+  - task_id: TASK-005
+    title: "接入真实城市栅格数据"
+    details: "将 GIS、人口密度、建筑物高度、禁飞区和特殊区域数据统一栅格化为同尺寸二维数组。"
+    priority: high
+    status: pending
+    created_at: "2026-05-11T11:40:00+08:00"
+    updated_at: "2026-05-11T11:40:00+08:00"
+  - task_id: TASK-006
+    title: "接入路径规划算法"
+    details: "将 path_planning_cost() 输出接入 A*、Dijkstra、RRT* 或三维路径规划流程。"
+    priority: high
+    status: pending
+    created_at: "2026-05-11T11:40:00+08:00"
+    updated_at: "2026-05-11T11:40:00+08:00"
+  - task_id: TASK-007
+    title: "在有 Python 的环境中验证代码"
+    details: "执行语法检查、最小示例运行和必要的单元测试。"
+    priority: medium
+    status: pending
+    created_at: "2026-05-11T11:40:00+08:00"
+    updated_at: "2026-05-11T11:40:00+08:00"
+completed:
+  - task_id: TASK-001
+    title: "提炼论文核心算法思想"
+    details: "核心流程为坠地概率核、人口密度/遮蔽风险层、多图层融合。"
+    priority: high
+    status: completed
+    created_at: "2026-05-11T11:00:00+08:00"
+    updated_at: "2026-05-11T11:40:00+08:00"
+    completed_at: "2026-05-11T11:40:00+08:00"
+    notes: "已完成。"
+  - task_id: TASK-002
+    title: "实现无人机对地风险栅格评估模块"
+    details: "实现文件为 uav_ground_risk.py。"
+    priority: high
+    status: completed
+    created_at: "2026-05-11T11:00:00+08:00"
+    updated_at: "2026-05-11T11:40:00+08:00"
+    completed_at: "2026-05-11T11:40:00+08:00"
+    notes: "已完成。"
+  - task_id: TASK-003
+    title: "补充 README 使用说明"
+    details: "说明图层输入、最小示例和路径规划衔接方式。"
+    priority: medium
+    status: completed
+    created_at: "2026-05-11T11:00:00+08:00"
+    updated_at: "2026-05-11T11:40:00+08:00"
+    completed_at: "2026-05-11T11:40:00+08:00"
+    notes: "已完成。"
+  - task_id: TASK-004
+    title: "初始化 agent-handoff 交接状态"
+    details: "交接入口为 .agent-handoff/START-HERE.md。"
+    priority: high
+    status: completed
+    created_at: "2026-05-11T11:35:00+08:00"
+    updated_at: "2026-05-11T11:40:00+08:00"
+    completed_at: "2026-05-11T11:40:00+08:00"
+    notes: "已完成。"
+
