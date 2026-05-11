@@ -38,6 +38,7 @@ from uav_ground_risk import (
     assess_ground_risk,
     safe_airspace_mask,
     path_planning_cost,
+    write_result_visualization_html,
 )
 
 height = width = 20
@@ -86,13 +87,71 @@ result = assess_ground_risk(
 
 safe_mask = safe_airspace_mask(result, max_allowed_level=RiskLevel.LOW)
 cost_map = path_planning_cost(result)
+write_result_visualization_html(result, "risk_visualization.html", title="城市低空无人机对地风险图")
 ```
+
+运行后会生成 `risk_visualization.html`，其中包含风险值热力图、风险等级图、安全空域掩膜和路径规划代价图。
+
+## 接入 CSV 栅格
+
+如果已经把 GIS、人口、建筑物或管控区域数据栅格化为同尺寸 CSV，可以用内置读取函数接入：
+
+```python
+from uav_ground_risk import (
+    read_bool_grid_csv,
+    read_level_grid_csv,
+    read_number_grid_csv,
+)
+
+population = read_number_grid_csv("population_density.csv")
+shelter = read_number_grid_csv("shelter_factor.csv")
+no_fly = read_bool_grid_csv("no_fly.csv")
+obstacles = read_number_grid_csv("obstacle_height_m.csv")
+special = read_level_grid_csv("special_area_level.csv")
+```
+
+CSV 中空行会被忽略；布尔层支持 `1/0`、`true/false`、`yes/no`；特殊区域等级使用 `RiskLevel` 的整数值 `0` 到 `4`。
 
 ## 与路径规划的衔接
 
 - A* / Dijkstra：把 `cost_map[y][x]` 作为栅格通行代价，`inf` 代表不可通行。
 - RRT / RRT*：采样点落入 `safe_mask == False` 的栅格时拒绝，边检查时沿线采样多个栅格。
 - 三维航路：对不同飞行高度重复生成 `result`，堆叠为 `risk[z][y][x]`，再做三维路径搜索。
+
+## 可视化输出
+
+`write_result_visualization_html()` 使用纯标准库生成可直接打开的 HTML 插图，不依赖 Matplotlib：
+
+```python
+write_result_visualization_html(
+    result,
+    "risk_visualization.html",
+    title="城市低空无人机对地风险图",
+    cell_size=28,
+)
+```
+
+输出文件包含四个面板：
+
+- 人员伤亡风险值 `R(x, y)`：按对数尺度渲染热力图。
+- 融合后的风险等级：按 `SAFE/LOW/MEDIUM/HIGH/FORBIDDEN` 分类着色。
+- 安全空域掩膜：绿色表示可飞，红色表示不可飞。
+- 路径规划代价图：`inf` 代表不可通行。
+
+也可以运行示例脚本生成演示图：
+
+```bash
+python examples/generate_visualization_example.py
+```
+
+## 验证
+
+项目只依赖 Python 标准库，克隆后可以直接运行：
+
+```bash
+python -m py_compile uav_ground_risk.py tests/test_uav_ground_risk.py examples/generate_visualization_example.py
+python -m unittest discover -s tests
+```
 
 ## 跨设备交接
 

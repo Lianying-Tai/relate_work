@@ -1,14 +1,17 @@
 # 已定决策
 
-- DEC-001：先实现纯标准库 Python 版本
+- DEC-001: 先实现纯标准库 Python 版本
   时间：2026-05-11 11:40:00 +0800
   原因：当前项目需要跨设备可用，纯标准库实现便于迁移；后续可按真实数据规模再引入 NumPy、GeoPandas 或 Rasterio。
-
-- DEC-002：以二维栅格 `grid[y][x]` 作为统一数据结构
+- DEC-002: 以二维栅格 grid[y][x] 作为统一数据结构
   时间：2026-05-11 11:40:00 +0800
   原因：论文方法基于栅格地图，二维数组便于接入 A*、Dijkstra、RRT* 等规划算法。
-
-- DEC-003：保留 agent-handoff 仓库内 runtime 副本
+- DEC-003: 保留 agent-handoff 仓库内 runtime 副本
   时间：2026-05-11 11:40:00 +0800
-  原因：方便另一台电脑克隆仓库后直接使用 `.agent-handoff/runtime/agent-handoff/scripts/handoff.py` 恢复上下文。
-
+  原因：方便另一台电脑克隆仓库后直接使用 .agent-handoff/runtime/agent-handoff/scripts/handoff.py 恢复上下文。
+- DEC-004: 继续保持纯标准库实现并用 CSV 作为首个真实数据接入口
+  时间：2026-05-11 18:55:42 +0800
+  原因：CSV 读取无需引入额外依赖，能先验证真实栅格数据接入流程；后续数据规模增大时再接入 NumPy、GeoPandas 或 Rasterio。
+- DEC-005: 使用纯标准库 SVG/HTML 作为首版可视化方案
+  时间：2026-05-11 20:36:20 +0800
+  原因：避免引入 Matplotlib 等额外依赖，便于跨设备运行和交接；HTML/SVG 可直接在浏览器查看，也方便嵌入文档。

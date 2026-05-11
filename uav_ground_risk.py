@@ -11,16 +11,19 @@ All grids are row-major: grid[y][x].
 
 from __future__ import annotations
 
+import csv
 from dataclasses import dataclass
 from enum import IntEnum
+import html
 import math
 import random
-from typing import Iterable, List, Optional, Sequence, Tuple
+from typing import Callable, Iterable, List, Optional, Sequence, Tuple, TypeVar
 
 
 NumberGrid = List[List[float]]
 BoolGrid = List[List[bool]]
 LevelGrid = List[List[int]]
+T = TypeVar("T")
 
 
 class RiskLevel(IntEnum):
@@ -75,6 +78,42 @@ class RiskAssessmentResult:
 
 def zeros(height: int, width: int, value: float = 0.0) -> NumberGrid:
     return [[value for _ in range(width)] for _ in range(height)]
+
+
+def _escape(text: object) -> str:
+    return html.escape(str(text), quote=True)
+
+
+def read_csv_grid(path: str, parser: Callable[[str], T]) -> List[List[T]]:
+    with open(path, newline="", encoding="utf-8-sig") as handle:
+        rows = [
+            [parser(cell.strip()) for cell in row]
+            for row in csv.reader(handle)
+            if row and any(cell.strip() for cell in row)
+        ]
+    same_shape(rows)
+    return rows
+
+
+def read_number_grid_csv(path: str) -> NumberGrid:
+    return read_csv_grid(path, float)
+
+
+def parse_bool_cell(value: str) -> bool:
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "t", "yes", "y"}:
+        return True
+    if normalized in {"0", "false", "f", "no", "n", ""}:
+        return False
+    raise ValueError(f"invalid boolean cell value: {value!r}")
+
+
+def read_bool_grid_csv(path: str) -> BoolGrid:
+    return read_csv_grid(path, parse_bool_cell)
+
+
+def read_level_grid_csv(path: str) -> LevelGrid:
+    return read_csv_grid(path, lambda value: int(RiskLevel(int(value))))
 
 
 def same_shape(*grids: Sequence[Sequence[object]]) -> Tuple[int, int]:
@@ -384,6 +423,256 @@ def path_planning_cost(
             else:
                 cost[y][x] = 1.0 + risk_weight * result.risk_value[y][x] + level_weight * result.risk_level[y][x]
     return cost
+
+
+def _hex_to_rgb(color: str) -> Tuple[int, int, int]:
+    color = color.lstrip("#")
+    if len(color) != 6:
+        raise ValueError("color must be in #RRGGBB format")
+    return int(color[0:2], 16), int(color[2:4], 16), int(color[4:6], 16)
+
+
+def _rgb_to_hex(rgb: Tuple[int, int, int]) -> str:
+    return "#{:02x}{:02x}{:02x}".format(*rgb)
+
+
+def _mix_color(start: str, end: str, ratio: float) -> str:
+    ratio = min(1.0, max(0.0, ratio))
+    a = _hex_to_rgb(start)
+    b = _hex_to_rgb(end)
+    return _rgb_to_hex(tuple(round(a[i] + (b[i] - a[i]) * ratio) for i in range(3)))
+
+
+def _finite_values(grid: NumberGrid) -> List[float]:
+    return [value for row in grid for value in row if math.isfinite(value)]
+
+
+def _linear_color(value: float, minimum: float, maximum: float, start: str, end: str) -> str:
+    if not math.isfinite(value):
+        return "#111827"
+    if maximum <= minimum:
+        return end
+    return _mix_color(start, end, (value - minimum) / (maximum - minimum))
+
+
+def _log_color(value: float, positive_min: float, positive_max: float, start: str, end: str) -> str:
+    if not math.isfinite(value):
+        return "#111827"
+    if value <= 0:
+        return start
+    if positive_max <= positive_min:
+        return end
+    ratio = (math.log10(value) - math.log10(positive_min)) / (
+        math.log10(positive_max) - math.log10(positive_min)
+    )
+    return _mix_color(start, end, ratio)
+
+
+def render_number_grid_svg(
+    grid: NumberGrid,
+    title: str,
+    cell_size: int = 28,
+    start_color: str = "#f8fafc",
+    end_color: str = "#dc2626",
+    log_scale: bool = False,
+    value_format: str = ".1e",
+) -> str:
+    height, width = same_shape(grid)
+    finite = _finite_values(grid)
+    minimum = min(finite) if finite else 0.0
+    maximum = max(finite) if finite else 1.0
+    positive = [value for value in finite if value > 0]
+    positive_min = min(positive) if positive else 1.0
+    positive_max = max(positive) if positive else 1.0
+    padding_top = 44
+    padding_left = 44
+    svg_width = padding_left + width * cell_size + 16
+    svg_height = padding_top + height * cell_size + 48
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{svg_width}" height="{svg_height}" viewBox="0 0 {svg_width} {svg_height}" role="img" aria-label="{_escape(title)}">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        f'<text x="{padding_left}" y="24" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#111827">{_escape(title)}</text>',
+    ]
+
+    for y, row in enumerate(grid):
+        parts.append(
+            f'<text x="{padding_left - 10}" y="{padding_top + y * cell_size + cell_size * 0.65:.1f}" text-anchor="end" font-family="Arial, sans-serif" font-size="10" fill="#475569">{y}</text>'
+        )
+        for x, value in enumerate(row):
+            if y == 0:
+                parts.append(
+                    f'<text x="{padding_left + x * cell_size + cell_size / 2:.1f}" y="{padding_top - 8}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#475569">{x}</text>'
+                )
+            color = (
+                _log_color(value, positive_min, positive_max, start_color, end_color)
+                if log_scale
+                else _linear_color(value, minimum, maximum, start_color, end_color)
+            )
+            label = "inf" if not math.isfinite(value) else format(value, value_format)
+            parts.extend(
+                [
+                    f'<rect x="{padding_left + x * cell_size}" y="{padding_top + y * cell_size}" width="{cell_size}" height="{cell_size}" fill="{color}" stroke="#ffffff" stroke-width="1"/>',
+                    f'<title>({x}, {y}) {label}</title>',
+                ]
+            )
+
+    parts.extend(
+        [
+            f'<text x="{padding_left}" y="{svg_height - 18}" font-family="Arial, sans-serif" font-size="11" fill="#475569">min: {format(minimum, value_format)}  max: {format(maximum, value_format)}</text>',
+            "</svg>",
+        ]
+    )
+    return "\n".join(parts)
+
+
+def render_level_grid_svg(
+    grid: LevelGrid,
+    title: str,
+    cell_size: int = 28,
+) -> str:
+    height, width = same_shape(grid)
+    colors = {
+        RiskLevel.SAFE: "#d1fae5",
+        RiskLevel.LOW: "#fde68a",
+        RiskLevel.MEDIUM: "#fb923c",
+        RiskLevel.HIGH: "#ef4444",
+        RiskLevel.FORBIDDEN: "#111827",
+    }
+    labels = {
+        RiskLevel.SAFE: "SAFE",
+        RiskLevel.LOW: "LOW",
+        RiskLevel.MEDIUM: "MED",
+        RiskLevel.HIGH: "HIGH",
+        RiskLevel.FORBIDDEN: "FORB",
+    }
+    padding_top = 44
+    padding_left = 44
+    legend_height = 34
+    svg_width = padding_left + width * cell_size + 16
+    svg_height = padding_top + height * cell_size + legend_height + 30
+    parts = [
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{svg_width}" height="{svg_height}" viewBox="0 0 {svg_width} {svg_height}" role="img" aria-label="{_escape(title)}">',
+        '<rect width="100%" height="100%" fill="#ffffff"/>',
+        f'<text x="{padding_left}" y="24" font-family="Arial, sans-serif" font-size="16" font-weight="700" fill="#111827">{_escape(title)}</text>',
+    ]
+
+    for y, row in enumerate(grid):
+        parts.append(
+            f'<text x="{padding_left - 10}" y="{padding_top + y * cell_size + cell_size * 0.65:.1f}" text-anchor="end" font-family="Arial, sans-serif" font-size="10" fill="#475569">{y}</text>'
+        )
+        for x, value in enumerate(row):
+            level = RiskLevel(value)
+            if y == 0:
+                parts.append(
+                    f'<text x="{padding_left + x * cell_size + cell_size / 2:.1f}" y="{padding_top - 8}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" fill="#475569">{x}</text>'
+                )
+            text_color = "#ffffff" if level in {RiskLevel.HIGH, RiskLevel.FORBIDDEN} else "#111827"
+            parts.extend(
+                [
+                    f'<rect x="{padding_left + x * cell_size}" y="{padding_top + y * cell_size}" width="{cell_size}" height="{cell_size}" fill="{colors[level]}" stroke="#ffffff" stroke-width="1"/>',
+                    f'<text x="{padding_left + x * cell_size + cell_size / 2:.1f}" y="{padding_top + y * cell_size + cell_size * 0.64:.1f}" text-anchor="middle" font-family="Arial, sans-serif" font-size="8" font-weight="700" fill="{text_color}">{labels[level]}</text>',
+                    f'<title>({x}, {y}) {labels[level]}</title>',
+                ]
+            )
+
+    legend_y = padding_top + height * cell_size + 18
+    legend_x = padding_left
+    for level in RiskLevel:
+        parts.extend(
+            [
+                f'<rect x="{legend_x}" y="{legend_y}" width="12" height="12" fill="{colors[level]}" stroke="#cbd5e1" stroke-width="0.5"/>',
+                f'<text x="{legend_x + 16}" y="{legend_y + 10}" font-family="Arial, sans-serif" font-size="10" fill="#334155">{labels[level]}</text>',
+            ]
+        )
+        legend_x += 58
+
+    parts.append("</svg>")
+    return "\n".join(parts)
+
+
+def render_bool_grid_svg(
+    grid: BoolGrid,
+    title: str,
+    cell_size: int = 28,
+    true_label: str = "flyable",
+    false_label: str = "blocked",
+) -> str:
+    numeric = [[1.0 if value else 0.0 for value in row] for row in grid]
+    svg = render_number_grid_svg(
+        numeric,
+        title=title,
+        cell_size=cell_size,
+        start_color="#ef4444",
+        end_color="#22c55e",
+        log_scale=False,
+        value_format=".0f",
+    )
+    return svg.replace("min: 0  max: 1", f"{_escape(false_label)}: 0  {_escape(true_label)}: 1")
+
+
+def render_result_visualization_html(
+    result: RiskAssessmentResult,
+    title: str = "UAV Ground Risk Visualization",
+    cell_size: int = 28,
+) -> str:
+    safe = safe_airspace_mask(result)
+    cost = path_planning_cost(result)
+    panels = [
+        render_number_grid_svg(
+            result.risk_value,
+            "Fatality Risk R(x, y)",
+            cell_size=cell_size,
+            start_color="#eff6ff",
+            end_color="#b91c1c",
+            log_scale=True,
+        ),
+        render_level_grid_svg(result.risk_level, "Fused Risk Level", cell_size=cell_size),
+        render_bool_grid_svg(safe, "Safe Airspace Mask", cell_size=cell_size),
+        render_number_grid_svg(
+            cost,
+            "Path Planning Cost",
+            cell_size=cell_size,
+            start_color="#f8fafc",
+            end_color="#7c2d12",
+            log_scale=False,
+            value_format=".2f",
+        ),
+    ]
+    return "\n".join(
+        [
+            "<!doctype html>",
+            '<html lang="zh-CN">',
+            "<head>",
+            '<meta charset="utf-8"/>',
+            f"<title>{_escape(title)}</title>",
+            "<style>",
+            "body{margin:24px;font-family:Arial,'Microsoft YaHei',sans-serif;background:#f8fafc;color:#111827;}",
+            "h1{font-size:22px;margin:0 0 18px;}",
+            ".grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:18px;align-items:start;}",
+            ".panel{background:#fff;border:1px solid #e5e7eb;border-radius:8px;padding:12px;box-shadow:0 1px 2px rgba(15,23,42,.05);overflow:auto;}",
+            "svg{max-width:100%;height:auto;display:block;}",
+            "</style>",
+            "</head>",
+            "<body>",
+            f"<h1>{_escape(title)}</h1>",
+            '<div class="grid">',
+            *[f'<section class="panel">{panel}</section>' for panel in panels],
+            "</div>",
+            "</body>",
+            "</html>",
+        ]
+    )
+
+
+def write_result_visualization_html(
+    result: RiskAssessmentResult,
+    output_path: str,
+    title: str = "UAV Ground Risk Visualization",
+    cell_size: int = 28,
+) -> None:
+    html_text = render_result_visualization_html(result, title=title, cell_size=cell_size)
+    with open(output_path, "w", encoding="utf-8") as handle:
+        handle.write(html_text)
 
 
 def cells_from_polygons_placeholder(items: Iterable[Tuple[int, int]], height: int, width: int) -> BoolGrid:
